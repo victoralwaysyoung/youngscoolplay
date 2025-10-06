@@ -260,6 +260,96 @@ download_and_install() {
     cp -r config "$INSTALL_DIR/"
     cp .env.example "$INSTALL_DIR/"
     
+    # Copy the config.json file to web/service directory for Go embed
+    print_info "Setting up configuration files..."
+    if [[ -f "../web/service/config.json" ]]; then
+        cp "../web/service/config.json" "web/service/"
+    elif [[ -f "../../web/service/config.json" ]]; then
+        cp "../../web/service/config.json" "web/service/"
+    else
+        print_info "Creating default config.json for embed..."
+        cat > "web/service/config.json" << 'EOF'
+{
+  "log": {
+    "access": "none",
+    "dnsLog": false,
+    "error": "",
+    "loglevel": "warning",
+    "maskAddress": ""
+  },
+  "api": {
+    "tag": "api",
+    "services": [
+      "HandlerService",
+      "LoggerService",
+      "StatsService"
+    ]
+  },
+  "inbounds": [
+    {
+      "tag": "api",
+      "listen": "127.0.0.1",
+      "port": 62789,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {
+        "domainStrategy": "AsIs",
+        "redirect": "",
+        "noises": []
+      }
+    },
+    {
+      "tag": "blocked",
+      "protocol": "blackhole",
+      "settings": {}
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true,
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
+  },
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "api"
+        ],
+        "outboundTag": "api"
+      }
+    ]
+  },
+  "stats": {},
+  "transport": {},
+  "dns": {},
+  "fakedns": {},
+  "metrics": {
+    "tag": "metrics_out",
+    "listen": "127.0.0.1:11111"
+  }
+}
+EOF
+    fi
+    
     # Copy geo files if they exist
     if [[ -d "bin" ]]; then
         cp -r bin "$INSTALL_DIR/"
