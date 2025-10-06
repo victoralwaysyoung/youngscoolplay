@@ -173,13 +173,26 @@ install_application() {
     cd /tmp
     tar -xzf "youngscoolplay-linux-${ASSET_ARCH}.tar.gz"
     
-    # Copy files
-    cp youngscoolplay "$INSTALL_DIR/"
+    # Copy files from extracted directory
+    cp "youngscoolplay-linux-${ASSET_ARCH}/youngscoolplay" "$INSTALL_DIR/"
     chmod +x "$INSTALL_DIR/youngscoolplay"
     
+    # Copy web assets and other files if they exist
+    if [[ -d "youngscoolplay-linux-${ASSET_ARCH}/web" ]]; then
+        cp -r "youngscoolplay-linux-${ASSET_ARCH}/web" "$INSTALL_DIR/"
+    fi
+    
+    if [[ -d "youngscoolplay-linux-${ASSET_ARCH}/config" ]]; then
+        cp -r "youngscoolplay-linux-${ASSET_ARCH}/config" "$INSTALL_DIR/"
+    fi
+    
+    if [[ -d "youngscoolplay-linux-${ASSET_ARCH}/bin" ]]; then
+        cp -r "youngscoolplay-linux-${ASSET_ARCH}/bin"/* "$INSTALL_DIR/bin/"
+    fi
+    
     # Copy configuration files if they exist
-    if [[ -f ".env.example" ]]; then
-        cp .env.example "$CONFIG_DIR/"
+    if [[ -f "youngscoolplay-linux-${ASSET_ARCH}/.env.example" ]]; then
+        cp "youngscoolplay-linux-${ASSET_ARCH}/.env.example" "$CONFIG_DIR/"
     fi
     
     print_success "Application installed to $INSTALL_DIR"
