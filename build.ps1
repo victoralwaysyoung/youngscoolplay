@@ -15,6 +15,9 @@ if (Test-Path "dist") {
     Remove-Item -Recurse -Force "dist"
 }
 New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+if (-not (Test-Path "dist\bin")) {
+    New-Item -ItemType Directory -Path "dist\bin" -Force | Out-Null
+}
 
 # Set Go environment
 $env:GOROOT = ""
@@ -25,6 +28,8 @@ $env:GO111MODULE = "on"
 $targets = @(
     @{OS="linux"; ARCH="amd64"; EXT=""},
     @{OS="linux"; ARCH="arm64"; EXT=""},
+    @{OS="linux"; ARCH="386";   EXT=""},
+    @{OS="linux"; ARCH="armv7"; EXT=""},
     @{OS="windows"; ARCH="amd64"; EXT=".exe"},
     @{OS="darwin"; ARCH="amd64"; EXT=""},
     @{OS="darwin"; ARCH="arm64"; EXT=""}
@@ -37,10 +42,19 @@ foreach ($target in $targets) {
     Write-Host "Building $outputName..." -ForegroundColor Cyan
     
     $env:GOOS = $target.OS
-    $env:GOARCH = $target.ARCH
+    # Map armv7 target to GOARCH/GOARM for correct build
+    if ($target.ARCH -eq "armv7") {
+        $env:GOARCH = "arm"
+        $env:GOARM  = "7"
+    } else {
+        $env:GOARCH = $target.ARCH
+        # Ensure GOARM is unset for non-arm builds to avoid leakage
+        Remove-Item Env:\GOARM -ErrorAction SilentlyContinue
+    }
     
-    # Build the binary
-    go build -ldflags "-s -w -X main.version=$Version" -o "dist\$outputName" main.go
+    # Build the binary to dist\bin to avoid name collision with package directory
+    $binaryPath = "dist\bin\$outputName"
+    go build -ldflags "-s -w -X main.version=$Version" -o $binaryPath main.go
     
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to build $outputName"
@@ -49,13 +63,16 @@ foreach ($target in $targets) {
     
     # Create package directory
     $packageDir = "dist\$packageName"
+    if (-not (Test-Path $packageDir)) {
+        New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+    }
     New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
     
     # Copy binary (check if it exists first)
-    if (Test-Path "dist\$outputName") {
-        Copy-Item "dist\$outputName" "$packageDir\youngscoolplay$($target.EXT)"
+    if (Test-Path $binaryPath) {
+        Copy-Item $binaryPath "$packageDir\youngscoolplay$($target.EXT)"
     } else {
-        Write-Error "Binary dist\$outputName was not created"
+        Write-Error "Binary $binaryPath was not created"
         exit 1
     }
     

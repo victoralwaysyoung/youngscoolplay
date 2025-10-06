@@ -46,109 +46,117 @@ check_root() {
 }
 
 check_system() {
-    if [[ ! -f /etc/os-release ]]; then
-        print_error "Cannot determine OS version"
+    # 跨发行版系统检测，对齐原作者逻辑
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        RELEASE_ID="$ID"
+    elif [[ -f /usr/lib/os-release ]]; then
+        . /usr/lib/os-release
+        RELEASE_ID="$ID"
+    else
+        print_error "无法识别系统类型，请联系作者"
         exit 1
     fi
-    
-    . /etc/os-release
-    
-    if [[ "$ID" != "ubuntu" ]]; then
-        print_warning "This script is designed for Ubuntu. Proceeding anyway..."
-    fi
-    
-    if [[ $(echo "$VERSION_ID >= 24.04" | bc -l) -ne 1 ]]; then
-        print_warning "This script is optimized for Ubuntu 24.04+. Current version: $VERSION_ID"
-    fi
+    print_info "检测到系统: ${RELEASE_ID}"
+}
+
+# 安装基础依赖（对齐原作者 install_base）
+install_base() {
+    case "${RELEASE_ID}" in
+        ubuntu|debian|armbian)
+            apt-get update && apt-get install -y -q wget curl tar tzdata unzip bc
+            ;;
+        centos|rhel|almalinux|rocky|ol)
+            yum -y update && yum install -y -q wget curl tar tzdata unzip bc
+            ;;
+        fedora|amzn|virtuozzo)
+            dnf -y update && dnf install -y -q wget curl tar tzdata unzip bc
+            ;;
+        arch|manjaro|parch)
+            pacman -Syu && pacman -Syu --noconfirm wget curl tar tzdata unzip bc
+            ;;
+        opensuse-tumbleweed|opensuse-leap)
+            zypper refresh && zypper -q install -y wget curl tar timezone unzip bc
+            ;;
+        alpine)
+            apk update && apk add wget curl tar tzdata unzip bc
+            ;;
+        *)
+            # 默认按Debian系处理
+            apt-get update && apt-get install -y -q wget curl tar tzdata unzip bc
+            ;;
+    esac
 }
 
 install_dependencies() {
-    print_info "Installing dependencies..."
-    
-    # Fix any interrupted dpkg operations
-    print_info "Checking and fixing package manager state..."
+    print_info "安装依赖..."
+    # 先尝试修复Debian系的dpkg状态（非Debian系忽略）
     dpkg --configure -a 2>/dev/null || true
     
-    # Clean package cache
-    apt clean
-    apt autoclean
+    # 跨发行版安装基础依赖
+    install_base
     
-    # Update package lists with retry
-    for i in {1..3}; do
-        if apt update; then
-            break
-        else
-            print_warning "Package update failed, retrying... ($i/3)"
-            sleep 2
-        fi
-    done
-    
-    # Install dependencies with error handling
-    if ! apt install -y curl wget tar unzip systemd bc; then
-        print_error "Failed to install dependencies"
-        print_info "Trying to fix broken packages..."
-        apt --fix-broken install -y
-        apt install -y curl wget tar unzip systemd bc
-    fi
-    
-    # Install Go if not present
+    # 安装Go（若未安装），保持与原作者一致的下载方式
     if ! command -v go &> /dev/null; then
-        print_info "Installing Go..."
+        print_info "安装Go..."
         GO_VERSION="1.21.5"
-        wget -q "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+        wget --inet4-only -q "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz"
         tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"
         echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
         export PATH=$PATH:/usr/local/go/bin
         rm "go${GO_VERSION}.linux-amd64.tar.gz"
     fi
-    
-    print_success "Dependencies installed"
+    print_success "依赖安装完成"
 }
 
 detect_architecture() {
-    case $(uname -m) in
-        x86_64)
-            ARCH="amd64"
+    # 双映射：发布资产架构 ASSET_ARCH，程序期望的Xray可执行命名 XRAY_NAME_ARCH，Xray压缩包架构 XRAY_ZIP_ARCH
+    case "$(uname -m)" in
+        x86_64|x64|amd64)
+            ASSET_ARCH="amd64"; XRAY_NAME_ARCH="amd64"; XRAY_ZIP_ARCH="64";
             ;;
-        aarch64)
-            ARCH="arm64"
+        i*86|x86)
+            ASSET_ARCH="386"; XRAY_NAME_ARCH="386"; XRAY_ZIP_ARCH="32";
             ;;
-        armv7l)
-            ARCH="armv7"
+        aarch64|arm64|armv8|armv8*)
+            ASSET_ARCH="arm64"; XRAY_NAME_ARCH="arm64"; XRAY_ZIP_ARCH="arm64-v8a";
+            ;;
+        armv7l|armv7|arm)
+            # 发布资产沿用 armv7；程序运行期望为 arm；Xray压缩包使用 arm32-v7a
+            ASSET_ARCH="armv7"; XRAY_NAME_ARCH="arm"; XRAY_ZIP_ARCH="arm32-v7a";
+            ;;
+        s390x)
+            ASSET_ARCH="s390x"; XRAY_NAME_ARCH="s390x"; XRAY_ZIP_ARCH="s390x";
             ;;
         *)
-            print_error "Unsupported architecture: $(uname -m)"
+            print_error "不支持的架构: $(uname -m)"
             exit 1
             ;;
     esac
-    print_info "Detected architecture: $ARCH"
+    print_info "发布资产架构: ${ASSET_ARCH}；Xray命名架构: ${XRAY_NAME_ARCH}；Xray压缩包架构: ${XRAY_ZIP_ARCH}"
 }
 
 download_release() {
-    print_info "Downloading YoungsCoolPlay..."
-    
-    # Get latest release info
-    LATEST_RELEASE=$(curl -s "https://api.github.com/repos/victoralwaysyoung/youngscoolplay/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    
+    print_info "下载 YoungsCoolPlay 发布包..."
+    # 获取最新版本；失败时回退到IPv4
+    LATEST_RELEASE=$(curl -Ls "https://api.github.com/repos/victoralwaysyoung/youngscoolplay/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     if [[ -z "$LATEST_RELEASE" ]]; then
-        print_error "Failed to get latest release information"
-        exit 1
+        print_warning "尝试使用IPv4获取版本信息..."
+        LATEST_RELEASE=$(curl -4 -Ls "https://api.github.com/repos/victoralwaysyoung/youngscoolplay/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ -z "$LATEST_RELEASE" ]]; then
+            print_error "获取最新版本失败，可能GitHub API受限"
+            exit 1
+        fi
     fi
+    print_info "最新版本: ${LATEST_RELEASE}"
     
-    print_info "Latest version: $LATEST_RELEASE"
-    
-    # Download release
-    DOWNLOAD_URL="https://github.com/victoralwaysyoung/youngscoolplay/releases/download/${LATEST_RELEASE}/youngscoolplay-linux-${ARCH}.tar.gz"
-    
+    DOWNLOAD_URL="https://github.com/victoralwaysyoung/youngscoolplay/releases/download/${LATEST_RELEASE}/youngscoolplay-linux-${ASSET_ARCH}.tar.gz"
     cd /tmp
-    wget -q --show-progress "$DOWNLOAD_URL" -O "youngscoolplay-linux-${ARCH}.tar.gz"
-    
-    if [[ ! -f "youngscoolplay-linux-${ARCH}.tar.gz" ]]; then
-        print_error "Failed to download YoungsCoolPlay"
+    wget --inet4-only -q --show-progress "$DOWNLOAD_URL" -O "youngscoolplay-linux-${ASSET_ARCH}.tar.gz" || {
+        print_error "发布包下载失败"
         exit 1
-    fi
-    
-    print_success "Download completed"
+    }
+    print_success "发布包下载完成"
 }
 
 install_application() {
@@ -163,7 +171,7 @@ install_application() {
     
     # Extract application
     cd /tmp
-    tar -xzf "youngscoolplay-linux-${ARCH}.tar.gz"
+    tar -xzf "youngscoolplay-linux-${ASSET_ARCH}.tar.gz"
     
     # Copy files
     cp youngscoolplay "$INSTALL_DIR/"
@@ -178,32 +186,28 @@ install_application() {
 }
 
 download_xray() {
-    print_info "Downloading Xray core..."
-    
-    # Get Xray version from go.mod or use latest
-    XRAY_VERSION="v1.8.3"  # This should match the version in go.mod
-    
+    print_info "下载 Xray 核心..."
+    XRAY_VERSION="v1.8.24"
     cd "$INSTALL_DIR/bin"
     
-    # Download Xray
-    XRAY_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip"
-    wget -q --show-progress "$XRAY_URL" -O "Xray-linux-64.zip"
+    local XRAY_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-${XRAY_ZIP_ARCH}.zip"
+    print_info "Xray 下载地址: ${XRAY_URL}"
+    wget --inet4-only -q --show-progress "$XRAY_URL" -O "Xray-linux-${XRAY_ZIP_ARCH}.zip" || {
+        print_error "Xray 下载失败"
+        exit 1
+    }
+    unzip -q "Xray-linux-${XRAY_ZIP_ARCH}.zip"
+    rm "Xray-linux-${XRAY_ZIP_ARCH}.zip"
     
-    unzip -q "Xray-linux-64.zip"
-    rm "Xray-linux-64.zip"
+    # 按程序期望重命名
+    mv xray "xray-linux-${XRAY_NAME_ARCH}"
+    chmod +x "xray-linux-${XRAY_NAME_ARCH}"
     
-    # Rename binary to expected name
-    if [[ "$ARCH" == "amd64" ]]; then
-        mv xray "xray-linux-amd64"
-    elif [[ "$ARCH" == "arm64" ]]; then
-        mv xray "xray-linux-arm64"
-    else
-        mv xray "xray-linux-${ARCH}"
-    fi
+    # 下载 geo 数据（可选）
+    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat || true
+    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat || true
     
-    chmod +x "xray-linux-${ARCH}"
-    
-    print_success "Xray core installed"
+    print_success "Xray 核心安装完成"
 }
 
 create_service() {
