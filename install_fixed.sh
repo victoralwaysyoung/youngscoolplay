@@ -260,15 +260,13 @@ download_and_install() {
     cp -r config "$INSTALL_DIR/"
     cp .env.example "$INSTALL_DIR/"
     
-    # Copy the config.json file to web/service directory for Go embed
+    # Ensure config.json exists for Go embed directive
     print_info "Setting up configuration files..."
-    if [[ -f "../web/service/config.json" ]]; then
-        cp "../web/service/config.json" "web/service/"
-    elif [[ -f "../../web/service/config.json" ]]; then
-        cp "../../web/service/config.json" "web/service/"
-    else
-        print_info "Creating default config.json for embed..."
-        cat > "web/service/config.json" << 'EOF'
+    
+    # Always create the config.json file in the correct location
+    print_info "Creating config.json for Go embed..."
+    mkdir -p "web/service"
+    cat > "web/service/config.json" << 'EOF'
 {
   "log": {
     "access": "none",
@@ -348,7 +346,6 @@ download_and_install() {
   }
 }
 EOF
-    fi
     
     # Copy geo files if they exist
     if [[ -d "bin" ]]; then
