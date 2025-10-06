@@ -282,8 +282,24 @@ download_and_install() {
     
     print_info "Using Go version: $(go version)"
     
-    if ! go build -ldflags "-s -w" -o "$INSTALL_DIR/youngscoolplay" main.go; then
+    # Initialize Go module if go.mod doesn't exist
+    if [[ ! -f "go.mod" ]]; then
+        print_info "Initializing Go module..."
+        go mod init youngscoolplay
+    fi
+    
+    # Download dependencies
+    print_info "Downloading Go dependencies..."
+    if ! go mod tidy; then
+        print_error "Failed to download Go dependencies"
+        exit 1
+    fi
+    
+    # Build with proper flags
+    print_info "Compiling binary..."
+    if ! go build -ldflags "-s -w" -o "$INSTALL_DIR/youngscoolplay" .; then
         print_error "Failed to build YoungsCoolPlay"
+        print_error "Build output above may contain more details"
         exit 1
     fi
     
