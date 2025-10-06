@@ -65,7 +65,13 @@ build_for_platform() {
     # Set environment variables for cross-compilation
     export GOOS=$os
     export GOARCH=$arch
-    export CGO_ENABLED=0
+    
+    # Enable CGO for platforms that need SQLite support
+    if [[ "$os" == "linux" ]]; then
+        export CGO_ENABLED=1
+    else
+        export CGO_ENABLED=0
+    fi
     
     # Build the application
     go build -ldflags "-s -w -X main.version=$VERSION" -o "$build_path/$output_name" main.go
