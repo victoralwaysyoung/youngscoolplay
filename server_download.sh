@@ -139,6 +139,72 @@ download_project() {
     print_success "项目下载完成"
 }
 
+# 下载Xray核心
+download_xray() {
+    print_info "下载Xray核心..."
+    
+    cd "$TEMP_DIR/$PROJECT_NAME"
+    
+    # 获取系统架构
+    ARCH=$(uname -m)
+    case $ARCH in
+        x86_64)
+            XRAY_ARCH="64"
+            BINARY_ARCH="amd64"
+            ;;
+        aarch64|arm64)
+            XRAY_ARCH="arm64-v8a"
+            BINARY_ARCH="arm64"
+            ;;
+        armv7l)
+            XRAY_ARCH="arm32-v7a"
+            BINARY_ARCH="armv7"
+            ;;
+        armv6l)
+            XRAY_ARCH="arm32-v6"
+            BINARY_ARCH="armv6"
+            ;;
+        *)
+            print_error "不支持的架构: $ARCH"
+            exit 1
+            ;;
+    esac
+    
+    # 创建bin目录
+    mkdir -p bin
+    cd bin
+    
+    # 下载Xray核心 (使用最新稳定版本)
+    XRAY_VERSION="v1.8.24"
+    XRAY_URL="https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-${XRAY_ARCH}.zip"
+    
+    print_info "下载地址: $XRAY_URL"
+    wget -q --show-progress "$XRAY_URL" -O "Xray-linux-${XRAY_ARCH}.zip" || {
+        print_error "Xray核心下载失败"
+        exit 1
+    }
+    
+    # 解压并重命名
+    unzip -q "Xray-linux-${XRAY_ARCH}.zip"
+    rm "Xray-linux-${XRAY_ARCH}.zip"
+    
+    # 重命名为期望的文件名
+    mv xray "xray-linux-${BINARY_ARCH}"
+    chmod +x "xray-linux-${BINARY_ARCH}"
+    
+    # 下载geo数据文件
+    print_info "下载geo数据文件..."
+    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat || {
+        print_warning "geoip.dat下载失败，将使用默认文件"
+    }
+    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat || {
+        print_warning "geosite.dat下载失败，将使用默认文件"
+    }
+    
+    cd ..
+    print_success "Xray核心安装完成"
+}
+
 # 安装Go环境
 install_go() {
     print_info "检查Go环境..."
@@ -226,7 +292,7 @@ install_project() {
     # 复制文件
     cd "$TEMP_DIR/$PROJECT_NAME"
     cp "$PROJECT_NAME" "$INSTALL_DIR/"
-    cp -r bin "$INSTALL_DIR/" 2>/dev/null || true
+    cp -r bin "$INSTALL_DIR/"
     cp -r web "$INSTALL_DIR/"
     cp .env.example "$INSTALL_DIR/"
     
@@ -331,6 +397,7 @@ main() {
     install_dependencies
     get_latest_version
     download_project
+    download_xray
     install_go
     compile_project
     install_project
