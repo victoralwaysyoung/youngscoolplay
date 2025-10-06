@@ -125,6 +125,90 @@ install_dependencies() {
     print_success "Dependencies installed successfully"
 }
 
+install_go() {
+    print_info "Checking Go installation..."
+    
+    # Check if Go is already installed and version is sufficient
+    if command -v go >/dev/null 2>&1; then
+        GO_VERSION=$(go version | grep -oE 'go[0-9]+\.[0-9]+' | sed 's/go//')
+        MAJOR_VERSION=$(echo $GO_VERSION | cut -d. -f1)
+        MINOR_VERSION=$(echo $GO_VERSION | cut -d. -f2)
+        
+        if [[ $MAJOR_VERSION -gt 1 ]] || [[ $MAJOR_VERSION -eq 1 && $MINOR_VERSION -ge 21 ]]; then
+            print_success "Go $GO_VERSION is already installed"
+            return 0
+        else
+            print_warning "Go version $GO_VERSION is too old, installing Go 1.21.5..."
+        fi
+    else
+        print_info "Go not found, installing Go 1.21.5..."
+    fi
+    
+    # Remove old Go installation if exists
+    rm -rf /usr/local/go
+    
+    # Download and install Go 1.21.5
+    GO_VERSION="1.21.5"
+    GO_ARCH=""
+    case $(uname -m) in
+        x86_64)
+            GO_ARCH="amd64"
+            ;;
+        aarch64)
+            GO_ARCH="arm64"
+            ;;
+        armv7l)
+            GO_ARCH="armv6l"
+            ;;
+        *)
+            print_error "Unsupported architecture for Go: $(uname -m)"
+            exit 1
+            ;;
+    esac
+    
+    GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+    GO_URL="https://golang.org/dl/${GO_TARBALL}"
+    
+    print_info "Downloading Go ${GO_VERSION}..."
+    if ! wget -q --show-progress "$GO_URL" -O "/tmp/${GO_TARBALL}"; then
+        print_error "Failed to download Go"
+        exit 1
+    fi
+    
+    print_info "Installing Go ${GO_VERSION}..."
+    tar -C /usr/local -xzf "/tmp/${GO_TARBALL}"
+    
+    # Add Go to PATH
+    if ! grep -q "/usr/local/go/bin" /etc/environment; then
+        echo 'PATH="/usr/local/go/bin:$PATH"' >> /etc/environment
+    fi
+    
+    # Add Go to current session PATH
+    export PATH="/usr/local/go/bin:$PATH"
+    
+    # Add Go to profile for all users
+    cat > /etc/profile.d/go.sh << 'EOF'
+export PATH="/usr/local/go/bin:$PATH"
+export GOROOT="/usr/local/go"
+export GOPATH="/root/go"
+EOF
+    
+    # Source the profile
+    source /etc/profile.d/go.sh
+    
+    # Clean up
+    rm -f "/tmp/${GO_TARBALL}"
+    
+    # Verify installation
+    if command -v go >/dev/null 2>&1; then
+        GO_INSTALLED_VERSION=$(go version | grep -oE 'go[0-9]+\.[0-9]+\.[0-9]+')
+        print_success "Go ${GO_INSTALLED_VERSION} installed successfully"
+    else
+        print_error "Go installation failed"
+        exit 1
+    fi
+}
+
 detect_architecture() {
     case $(uname -m) in
         x86_64)
@@ -183,9 +267,20 @@ download_and_install() {
     
     # Build the binary
     print_info "Building YoungsCoolPlay binary..."
-    export GOROOT=""
+    
+    # Ensure Go is in PATH
+    export PATH="/usr/local/go/bin:$PATH"
+    export GOROOT="/usr/local/go"
     export GOPROXY="https://goproxy.cn,direct"
     export GO111MODULE=on
+    
+    # Verify Go is available
+    if ! command -v go >/dev/null 2>&1; then
+        print_error "Go compiler not found in PATH"
+        exit 1
+    fi
+    
+    print_info "Using Go version: $(go version)"
     
     if ! go build -ldflags "-s -w" -o "$INSTALL_DIR/youngscoolplay" main.go; then
         print_error "Failed to build YoungsCoolPlay"
@@ -302,6 +397,7 @@ main() {
     check_system
     detect_architecture
     install_dependencies
+    install_go
     download_and_install
     create_service
     configure_firewall
