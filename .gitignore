@@ -1,0 +1,78 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+/db/
+/log/
+/logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration files with sensitive data
+config.json
+*.env
+!.env.example
+!.env.development
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Build artifacts
+/dist/
+/build/
+youngscoolplay
+youngscoolplay.exe
+
+# XRAY binaries (will be downloaded during installation)
+/bin/xray*
+/bin/wxray*
+!/bin/geoip.dat
+!/bin/geosite.dat
+!/bin/LICENSE
+!/bin/README.md
+
+# Node modules (if any frontend build tools are used)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backup files
+*.bak
+*.backup
