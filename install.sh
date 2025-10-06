@@ -209,7 +209,7 @@ download_xray() {
         print_error "Xray 下载失败"
         exit 1
     }
-    unzip -q "Xray-linux-${XRAY_ZIP_ARCH}.zip"
+    unzip -o -q "Xray-linux-${XRAY_ZIP_ARCH}.zip"
     rm "Xray-linux-${XRAY_ZIP_ARCH}.zip"
     
     # 按程序期望重命名
