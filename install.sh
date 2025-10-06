@@ -65,8 +65,31 @@ check_system() {
 install_dependencies() {
     print_info "Installing dependencies..."
     
-    apt update
-    apt install -y curl wget tar unzip systemd bc
+    # Fix any interrupted dpkg operations
+    print_info "Checking and fixing package manager state..."
+    dpkg --configure -a 2>/dev/null || true
+    
+    # Clean package cache
+    apt clean
+    apt autoclean
+    
+    # Update package lists with retry
+    for i in {1..3}; do
+        if apt update; then
+            break
+        else
+            print_warning "Package update failed, retrying... ($i/3)"
+            sleep 2
+        fi
+    done
+    
+    # Install dependencies with error handling
+    if ! apt install -y curl wget tar unzip systemd bc; then
+        print_error "Failed to install dependencies"
+        print_info "Trying to fix broken packages..."
+        apt --fix-broken install -y
+        apt install -y curl wget tar unzip systemd bc
+    fi
     
     # Install Go if not present
     if ! command -v go &> /dev/null; then

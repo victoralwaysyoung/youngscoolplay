@@ -13,14 +13,20 @@ A modern web-based proxy management panel forked from 3x-ui, redesigned for enha
 - **Database Management**: Built-in database management tools
 - **Security**: Enhanced security features and access controls
 
-## Quick Installation
+## 🚀 Quick Installation
 
-### Method 1: One-Click Installation Script
+### Method 1: One-Click Installation (Recommended)
 
 For Ubuntu 24.04+ servers:
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/victoralwaysyoung/youngscoolplay/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/victoralwaysyoung/youngscoolplay/master/install.sh)
+```
+
+**If you encounter dpkg interruption issues, use the fixed version:**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/victoralwaysyoung/youngscoolplay/master/install_fixed.sh)
 ```
 
 ### Method 2: Manual Installation
